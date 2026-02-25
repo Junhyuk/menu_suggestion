@@ -1,0 +1,40 @@
+# ===== OS / Editor =====
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# ===== Logs / temp =====
+*.log
+*.tmp
+
+# ===== Python venv =====
+.venv/
+venv/
+env/
+ENV/
+
+# ===== Heap dumps =====
+*.hprof
+
+# ===== Gradle / Android build outputs =====
+.gradle/
+**/build/
+local.properties
+*.apk
+*.aab
+*.dex
+*.class
+captures/
+.externalNativeBuild/
+.cxx/
+
+# ===== Screenshots / Images output folders (프로젝트에 맞게) =====
+screenshots/
+screenshot/
+screenShots/
+ScreenShots/
+captures/
