@@ -110,50 +110,48 @@ Java_com_dgy_menusuggestion_LlamaInference_loadModel(
 }
 
 // ════════════════════════════════════════════════════════════
-//  generate  — infer_gguf.cpp 동일 sample prompt 사용
+//  generate  — 전달받은 prompt 문자열을 직접 사용
+//  (LlamaPromptBuilder 가 chat template 을 이미 적용한 완성 prompt 를 전달)
 // ════════════════════════════════════════════════════════════
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_dgy_menusuggestion_LlamaInference_generate(
         JNIEnv* env,
         jobject /* this */,
-        jstring /* promptStr — ignored, using infer_gguf sample */) {
+        jstring promptStr) {
 
     if (!g_model || !g_vocab) {
         LOGE("[GEN] 모델/vocab 미로드");
         return env->NewStringUTF("Error: Model not loaded");
     }
 
+    // ── 전달받은 prompt 사용 (비어있으면 기본 sample prompt fallback) ──
+    const char* raw_prompt = env->GetStringUTFChars(promptStr, nullptr);
+    std::string prompt_str;
+    if (raw_prompt && strlen(raw_prompt) > 0) {
+        prompt_str = std::string(raw_prompt);
+        LOGI("[GEN] 외부 prompt 사용 (len=%d)", (int)prompt_str.size());
+    } else {
+        // fallback: 기존 sample prompt
+        std::vector<llama_chat_message> messages;
+        messages.push_back({"system", INFER_SYS_CONTENT});
+        messages.push_back({"user",   INFER_USER_CONTENT});
+        const char * tmpl = llama_model_chat_template(g_model, nullptr);
+        std::vector<char> formatted(8192);
+        int fmt_len = llama_chat_apply_template(
+            tmpl, messages.data(), messages.size(), true,
+            formatted.data(), (int)formatted.size());
+        if (fmt_len > (int)formatted.size()) {
+            formatted.resize(fmt_len + 1);
+            llama_chat_apply_template(tmpl, messages.data(), messages.size(), true,
+                formatted.data(), (int)formatted.size());
+        }
+        prompt_str = std::string(formatted.begin(), formatted.begin() + fmt_len);
+        LOGI("[GEN] fallback sample prompt 사용 (len=%d)", (int)prompt_str.size());
+    }
+    env->ReleaseStringUTFChars(promptStr, raw_prompt);
+
     LOGI("============================================================");
-    LOGI("[GEN] infer_gguf.cpp 와 동일한 sample prompt 로 추론 시작");
-
-    // ── Chat messages (infer_gguf.cpp 와 동일) ────────────────
-    std::vector<llama_chat_message> messages;
-    messages.push_back({"system", INFER_SYS_CONTENT});
-    messages.push_back({"user",   INFER_USER_CONTENT});
-
-    // ── Chat template 적용 ────────────────────────────────────
-    const char * tmpl = llama_model_chat_template(g_model, nullptr);
-    LOGD("[GEN] chat template: %.80s", tmpl ? tmpl : "(null)");
-
-    std::vector<char> formatted(8192);
-    int fmt_len = llama_chat_apply_template(
-        tmpl, messages.data(), messages.size(),
-        /*add_ass=*/true,
-        formatted.data(), (int)formatted.size());
-
-    if (fmt_len < 0) {
-        LOGE("[GEN] chat template 적용 실패");
-        return env->NewStringUTF("Error: chat template failed");
-    }
-    if (fmt_len > (int)formatted.size()) {
-        formatted.resize(fmt_len + 1);
-        fmt_len = llama_chat_apply_template(
-            tmpl, messages.data(), messages.size(),
-            true, formatted.data(), (int)formatted.size());
-    }
-    std::string prompt_str(formatted.begin(), formatted.begin() + fmt_len);
-    LOGI("[GEN] 포맷된 프롬프트 길이: %d chars", fmt_len);
-    // 프롬프트 앞부분만 출력
+    LOGI("[GEN] 추론 시작: prompt 길이=%d chars", (int)prompt_str.size());
     LOGD("[GEN] prompt[:200]: %.200s", prompt_str.c_str());
 
     // ── Context 생성 ─────────────────────────────────────────
